@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Copy, Check, Trash2, ArrowRightCircle } from 'lucide-react';
 import CircularTimer from './CircularTimer';
+import { copyToClipboard } from '../utils/totp';
 
 export default function OtpCard({
   account,
@@ -13,9 +14,9 @@ export default function OtpCard({
 }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (e) => {
+  const handleCopy = async (e) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(code);
+    await copyToClipboard(code);
     setCopied(true);
     onCopy(code, account.issuer);
     setTimeout(() => setCopied(false), 1500);
