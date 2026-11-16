@@ -122,9 +122,45 @@ async function generateTOTP(secret, timestamp = Date.now()) {
   return String(binary % 1000000).padStart(6, "0");
 }
 
+// 초기 데모 계정 (공개된 테스트용 키임을 명시)
+const INITIAL_DEMO_ACCOUNTS = [
+  {
+    id: "demo_github",
+    issuer: "GitHub (테스트 데모)",
+    name: "demo@example.com",
+    secret: "JBSWY3DPEHPK3PXP" // RFC 6238 공식 테스트 키 (실제 계정에 사용 금지)
+  }
+];
+
 export default function App() {
-  const [accounts, setAccounts] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  // 1단계: LocalStorage 연동 및 안전한 초기값 로드
+  const [accounts, setAccounts] = useState(() => {
+    try {
+      const saved = localStorage.getItem("kopo_otp_accounts");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("LocalStorage 계정 로드 실패:", e);
+    }
+    return INITIAL_DEMO_ACCOUNTS;
+  });
+
+  const [selectedId, setSelectedId] = useState(() => {
+    try {
+      const saved = localStorage.getItem("kopo_otp_accounts");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed[0].id;
+        }
+      }
+    } catch {}
+    return "demo_github";
+  });
 
   const [currentCode, setCurrentCode] = useState("------");
   const [seconds, setSeconds] = useState(30);
@@ -143,68 +179,98 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
 
+  // 계정 변경 시 LocalStorage 자동 동기화
+  useEffect(() => {
+    try {
+      localStorage.setItem("kopo_otp_accounts", JSON.stringify(accounts));
+    } catch (e) {
+      console.warn("LocalStorage 계정 저장 실패:", e);
+    }
+  }, [accounts]);
+
   const selected = accounts.find(
     account => account.id === selectedId
   );
 
-  // QR 코드용 OTP URI
+  // 2단계: QR 코드용 OTP URI (RFC 표준 호환: 콜론(:)은 레이블 구분자로 유지)
   const otpUri = useMemo(() => {
     if (!secret || !accountName.trim() || !issuer.trim()) {
       return "";
     }
 
-    const label = `${issuer}:${accountName}`;
+    const cleanSecret = secret.toUpperCase().replace(/[\s-]/g, "");
+    const safeIssuer = issuer.trim();
+    const safeAccount = accountName.trim();
+    // 콜론(:)을 온전히 남겨두고 발급자와 계정명을 각각 개별 인코딩
+    const label = `${encodeURIComponent(safeIssuer)}:${encodeURIComponent(safeAccount)}`;
 
     const params = new URLSearchParams({
-      secret,
-      issuer,
+      secret: cleanSecret,
+      issuer: safeIssuer,
       algorithm: "SHA1",
       digits: "6",
       period: "30"
     });
 
-    return `otpauth://totp/${encodeURIComponent(label)}?${params}`;
+    return `otpauth://totp/${label}?${params.toString()}`;
   }, [secret, accountName, issuer]);
 
-  // OTP 자동 갱신
+  // 3단계: OTP 자동 갱신 (30초 단위 재계산 최적화 & 화면 복귀 동기화)
   useEffect(() => {
     if (!selected) {
-      setCurrentCode("------");
       return;
     }
 
     let active = true;
+    let lastStep = -1;
 
-    const update = async () => {
+    const updateTimeAndCode = async () => {
       const now = Date.now();
+      const currentSeconds = 30 - Math.floor((now / 1000) % 30);
+      const currentStep = Math.floor(now / 1000 / 30);
 
-      setSeconds(
-        30 - Math.floor((now / 1000) % 30)
-      );
+      if (active) {
+        setSeconds(currentSeconds);
+      }
 
-      try {
-        const code = await generateTOTP(
-          selected.secret,
-          now
-        );
+      // 30초 단위 타임스텝이 변경되었을 때만 Web Crypto TOTP 계산 실행 (배터리/CPU 절약)
+      if (currentStep !== lastStep) {
+        lastStep = currentStep;
+        try {
+          const code = await generateTOTP(
+            selected.secret,
+            now
+          );
 
-        if (active) {
-          setCurrentCode(code);
-        }
-      } catch {
-        if (active) {
-          setCurrentCode("오류");
+          if (active) {
+            setCurrentCode(code);
+          }
+        } catch {
+          if (active) {
+            setCurrentCode("오류");
+          }
         }
       }
     };
 
-    update();
+    updateTimeAndCode();
+    const timer = setInterval(updateTimeAndCode, 1000);
 
-    const timer = setInterval(update, 1000);
+    // 브라우저 탭 복귀 및 모바일 화면 복귀 시 시간 즉시 동기화
+    const handleSync = () => {
+      if (document.visibilityState === "visible") {
+        updateTimeAndCode();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleSync);
+    window.addEventListener("focus", updateTimeAndCode);
 
     return () => {
       active = false;
       clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleSync);
+      window.removeEventListener("focus", updateTimeAndCode);
     };
   }, [selected]);
 
@@ -237,7 +303,7 @@ export default function App() {
       id: crypto.randomUUID(),
       issuer: issuer.trim(),
       name: accountName.trim(),
-      secret: secret.toUpperCase().replace(/\s/g, "")
+      secret: secret.toUpperCase().replace(/[\s-]/g, "")
     };
 
     setAccounts(prev => [...prev, newAccount]);
@@ -249,9 +315,9 @@ export default function App() {
     setError("");
   }
 
-  // 인증번호 검증
-  async function verifyOTP() {
-    if (!selected || !/^\d{6}$/.test(verifyCode)) {
+  // 인증번호 검증 로직
+  async function verifyOTP(codeToVerify = verifyCode) {
+    if (!selected || !/^\d{6}$/.test(codeToVerify)) {
       setVerification(false);
       return;
     }
@@ -272,7 +338,7 @@ export default function App() {
       );
 
       setVerification(
-        candidates.includes(verifyCode)
+        candidates.includes(codeToVerify)
       );
     } catch {
       setVerification(false);
@@ -281,17 +347,46 @@ export default function App() {
     }
   }
 
-  // 인증번호 복사
+  // 인증번호 복사 (Fallback 클립보드 복사 지원)
   async function copyCode() {
-    if (currentCode.length !== 6) return;
+    if (currentCode.length !== 6 || currentCode === "------") return;
 
-    try {
-      await navigator.clipboard.writeText(currentCode);
+    let success = false;
+
+    // 1. 최신 Clipboard API 시도
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(currentCode);
+        success = true;
+      } catch {
+        // Fallback으로 계속 진행
+      }
+    }
+
+    // 2. 비보안 HTTP 또는 권한 차단 환경 대비 Fallback (document.execCommand)
+    if (!success) {
+      try {
+        const textArea = document.createElement("textarea");
+        textArea.value = currentCode;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        success = document.execCommand("copy");
+        document.body.removeChild(textArea);
+      } catch {
+        success = false;
+      }
+    }
+
+    if (success) {
       setCopied(true);
-
+      setError("");
       setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setError("인증번호 복사에 실패했습니다.");
+    } else {
+      setError("인증번호 복사에 실패했습니다. 번호를 직접 복사해 주세요.");
     }
   }
 
@@ -301,18 +396,19 @@ export default function App() {
       return;
     }
 
-    setAccounts(prev =>
-      prev.filter(account => account.id !== id)
-    );
-
-    if (selectedId === id) {
-      setSelectedId(null);
-      setVerification(null);
-      setVerifyCode("");
-    }
+    setAccounts(prev => {
+      const updated = prev.filter(account => account.id !== id);
+      if (selectedId === id) {
+        setSelectedId(updated.length > 0 ? updated[0].id : null);
+        setVerification(null);
+        setVerifyCode("");
+      }
+      return updated;
+    });
   }
 
   const progress = (seconds / 30) * 100;
+  const isWarning = seconds <= 5;
 
   return (
     <div className="app-shell">
@@ -459,7 +555,7 @@ export default function App() {
                 {copied ? "복사 완료!" : "인증번호 복사"}
               </button>
 
-              <div className="timer-area">
+              <div className={`timer-area ${isWarning ? "timer-warning" : ""}`}>
                 <div className="timer-label">
                   <span>
                     <Clock size={15} />
@@ -471,7 +567,7 @@ export default function App() {
 
                 <div className="progress-track">
                   <div
-                    className="progress-fill"
+                    className={`progress-fill ${isWarning ? "progress-warning" : ""}`}
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -494,7 +590,7 @@ export default function App() {
                 <div>
                   <h3>인증번호 확인</h3>
                   <p>
-                    6자리 인증번호를 입력해 테스트하세요.
+                    6자리 인증번호를 입력하면 자동으로 확인됩니다.
                   </p>
                 </div>
               </div>
@@ -514,10 +610,13 @@ export default function App() {
                   placeholder="000000"
                   value={verifyCode}
                   onChange={e => {
-                    setVerifyCode(
-                      e.target.value.replace(/\D/g, "").slice(0, 6)
-                    );
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                    setVerifyCode(val);
                     setVerification(null);
+                    // 6자리 입력 시 자동 검증 실행
+                    if (val.length === 6) {
+                      verifyOTP(val);
+                    }
                   }}
                 />
 
@@ -561,10 +660,13 @@ export default function App() {
           </div>
 
           <div>
-            <h4>개인정보 보호</h4>
+            <h4>개인정보 보호 및 로컬 저장소 보안</h4>
             <p>
-              비밀 키와 인증번호는 브라우저 내부에서 처리됩니다.
-              외부 인증 API 서버를 사용하지 않습니다.
+              비밀 키와 인증번호는 브라우저 내부에서만 처리되며 외부 서버로 절대 전송되지 않습니다.
+              단, 등록된 계정 정보는 브라우저 LocalStorage에 암호화되지 않은 채 보관되므로, 공용 PC나 공용 기기에서는 사용 후 반드시 계정을 삭제해 주세요.
+            </p>
+            <p className="privacy-warning-sub">
+              ⚠️ [주의] 공개된 테스트용 비밀 키는 실습 및 데모 전용이므로 실제 사용자 계정(Google/GitHub 등)에 등록하여 사용하지 마세요.
             </p>
           </div>
 
