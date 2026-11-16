@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  Fingerprint
+  Check
 } from "lucide-react";
 
 import "./App.css";
@@ -413,281 +413,212 @@ export default function App() {
   return (
     <div className="app-shell">
 
-      {/* 상단 헤더 */}
+      {/* 모바일 상단 내비게이션 바 */}
       <header className="topbar">
         <div className="brand">
           <div className="brand-icon">
-            <ShieldCheck size={25} />
+            <ShieldCheck size={20} />
           </div>
 
           <div>
-            <h1>모바일 <span>OTP</span></h1>
-            <p>2단계 인증 보안 앱</p>
+            <h1>인증기</h1>
+            <span className="brand-badge">오프라인 보안</span>
           </div>
         </div>
 
-        <div className="secure-status">
-          <span className="status-dot" />
-          로컬 보안 모드
-        </div>
+        <button
+          className="add-button"
+          onClick={startNewAccount}
+          title="새 OTP 계정 등록"
+        >
+          <Plus size={16} />
+          <span>계정 추가</span>
+        </button>
       </header>
 
       <main className="main-content">
-
-        {/* 메인 소개 */}
-        <section className="welcome">
-          <div>
-            <p className="eyebrow">나만의 디지털 보안</p>
-
-            <h2>
-              안전한 인증,<br />
-              간편한 보안.
-            </h2>
-
-            <p className="welcome-desc">
-              나의 인증번호를 내 기기에서 안전하게 관리하세요.
-            </p>
-          </div>
-
-          <div className="welcome-art">
-            <Fingerprint size={76} strokeWidth={1} />
-          </div>
-        </section>
-
-        {/* 계정 목록 제목 */}
-        <section className="section-heading">
-          <div>
-            <p className="eyebrow">인증 계정 관리</p>
-            <h3>내 계정 <span>{accounts.length}</span></h3>
-          </div>
-
-          <button
-            className="add-button"
-            onClick={startNewAccount}
-          >
-            <Plus size={19} />
-            계정 추가
-          </button>
-        </section>
-
-        {/* 계정 목록 */}
+        {/* 계정이 없을 때의 Empty State */}
         {accounts.length === 0 ? (
           <section className="empty-state">
             <div className="empty-icon">
-              <KeyRound size={34} />
+              <KeyRound size={32} />
             </div>
 
             <h3>등록된 계정이 없습니다</h3>
 
             <p>
-              첫 번째 계정을 추가하고<br />
-              안전한 6자리 인증번호를 생성해 보세요.
+              우측 상단의 계정 추가 버튼을 눌러<br />
+              새로운 2단계 인증 계정을 등록하세요.
             </p>
 
             <button
               className="primary-button"
               onClick={startNewAccount}
             >
-              <Plus size={18} />
+              <Plus size={16} />
               첫 계정 등록하기
             </button>
           </section>
         ) : (
-          <div className="account-list">
-            {accounts.map(account => (
-              <button
-                key={account.id}
-                className={`account-card ${selectedId === account.id ? "active" : ""
-                  }`}
-                onClick={() => {
-                  setSelectedId(account.id);
-                  setVerification(null);
-                  setVerifyCode("");
-                }}
-              >
-                <div className="account-avatar">
-                  <ShieldCheck size={22} />
-                </div>
-
-                <div className="account-info">
-                  <strong>{account.issuer}</strong>
-                  <span>{account.name}</span>
-                </div>
-
-                <div className="account-arrow">›</div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* 선택한 계정의 OTP 화면 */}
-        {selected && (
           <>
-            <section className="otp-panel">
-              <div className="panel-top">
-                <div>
-                  <p className="eyebrow">현재 인증번호</p>
-                  <h3>{selected.issuer}</h3>
-                  <span className="muted">
-                    {selected.name}
-                  </span>
+            {/* 1. 활성 계정의 메인 OTP 카드 (Hero Card) */}
+            {selected && (
+              <section className="hero-otp-card">
+                <div className="card-header">
+                  <div className="issuer-group">
+                    <span className="issuer-tag">{selected.issuer}</span>
+                    <h2 className="account-title">{selected.name}</h2>
+                  </div>
+
+                  <button
+                    className="delete-button"
+                    title="계정 삭제"
+                    onClick={() => deleteAccount(selected.id)}
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
 
-                <button
-                  className="icon-button delete-button"
-                  title="계정 삭제"
-                  onClick={() => deleteAccount(selected.id)}
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-
-              <div className="otp-display">
-                {currentCode.slice(0, 3)}{" "}
-                <span>{currentCode.slice(3)}</span>
-              </div>
-
-              <button
-                className="copy-button"
-                onClick={copyCode}
-              >
-                <Copy size={15} />
-                {copied ? "복사 완료!" : "인증번호 복사"}
-              </button>
-
-              <div className={`timer-area ${isWarning ? "timer-warning" : ""}`}>
-                <div className="timer-label">
-                  <span>
-                    <Clock size={15} />
-                    다음 번호 갱신까지
-                  </span>
-
-                  <strong>{seconds}초</strong>
-                </div>
-
-                <div className="progress-track">
-                  <div
-                    className={`progress-fill ${isWarning ? "progress-warning" : ""}`}
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="security-note">
-                <Lock size={15} />
-                인증번호는 이 브라우저에서 생성됩니다.
-              </div>
-            </section>
-
-
-            {/* 인증번호 검증 */}
-            <section className="verify-panel">
-              <div className="panel-heading">
-                <div className="small-icon">
-                  <ShieldCheck size={19} />
-                </div>
-
-                <div>
-                  <h3>인증번호 확인</h3>
-                  <p>
-                    6자리 인증번호를 입력하면 자동으로 확인됩니다.
-                  </p>
-                </div>
-              </div>
-
-              <form
-                onSubmit={e => {
-                  e.preventDefault();
-                  verifyOTP();
-                }}
-              >
-                <input
-                  className="otp-input"
-                  type="text"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  placeholder="000000"
-                  value={verifyCode}
-                  onChange={e => {
-                    const val = e.target.value.replace(/\D/g, "").slice(0, 6);
-                    setVerifyCode(val);
-                    setVerification(null);
-                    // 6자리 입력 시 자동 검증 실행
-                    if (val.length === 6) {
-                      verifyOTP(val);
-                    }
-                  }}
-                />
-
-                <button
-                  className="primary-button verify-button"
-                  type="submit"
-                  disabled={
-                    loading || verifyCode.length !== 6
-                  }
-                >
-                  {loading
-                    ? "확인 중..."
-                    : "인증번호 확인하기"}
-                </button>
-              </form>
-
-              {verification !== null && (
+                {/* 6자리 대형 OTP 번호 표시 */}
                 <div
-                  className={`result-message ${verification ? "success" : "failure"
-                    }`}
+                  className="otp-number-display"
+                  onClick={copyCode}
+                  title="클릭하여 번호 복사"
+                  role="button"
+                  tabIndex={0}
                 >
-                  {verification
-                    ? <CheckCircle2 size={19} />
-                    : <XCircle size={19} />
-                  }
-
-                  {verification
-                    ? "인증에 성공했습니다!"
-                    : "인증에 실패했습니다. 번호를 다시 확인해 주세요."
-                  }
+                  <span className="otp-digit-group">{currentCode.slice(0, 3)}</span>
+                  <span className="otp-divider"></span>
+                  <span className="otp-digit-group">{currentCode.slice(3)}</span>
+                  <div className="copy-chip">
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    <span>{copied ? "복사됨" : "복사"}</span>
+                  </div>
                 </div>
-              )}
-            </section>
+
+                {/* 30초 카운트다운 타이머 바 */}
+                <div className={`countdown-container ${isWarning ? "is-warning" : ""}`}>
+                  <div className="countdown-info">
+                    <span className="countdown-label">
+                      <Clock size={13} />
+                      유효시간
+                    </span>
+                    <span className="countdown-seconds">{seconds}초</span>
+                  </div>
+
+                  <div className="countdown-track">
+                    <div
+                      className="countdown-fill"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* 2. 등록된 계정 전환 목록 (2개 이상일 때 탭 전환) */}
+            {accounts.length > 1 && (
+              <section className="account-switcher-section">
+                <div className="section-title-row">
+                  <span className="section-label">내 계정 ({accounts.length})</span>
+                </div>
+
+                <div className="account-switcher-list">
+                  {accounts.map(account => (
+                    <button
+                      key={account.id}
+                      className={`account-switch-chip ${selectedId === account.id ? "active" : ""}`}
+                      onClick={() => {
+                        setSelectedId(account.id);
+                        setVerification(null);
+                        setVerifyCode("");
+                      }}
+                    >
+                      <span className="switch-issuer">{account.issuer}</span>
+                      <span className="switch-name">{account.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* 3. 2단계 인증 간편 확인기 */}
+            {selected && (
+              <section className="quick-verify-card">
+                <div className="verify-header">
+                  <span className="verify-title">인증번호 확인 테스트</span>
+                  <span className="verify-subtitle">{selected.issuer} 코드를 입력해 일치 여부를 검증하세요</span>
+                </div>
+
+                <form
+                  className="verify-form"
+                  onSubmit={e => {
+                    e.preventDefault();
+                    verifyOTP();
+                  }}
+                >
+                  <input
+                    className="verify-input"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="000 000"
+                    value={verifyCode}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 6);
+                      setVerifyCode(val);
+                      setVerification(null);
+                      if (val.length === 6) {
+                        verifyOTP(val);
+                      }
+                    }}
+                  />
+
+                  <button
+                    className="verify-submit-button"
+                    type="submit"
+                    disabled={loading || verifyCode.length !== 6}
+                  >
+                    {loading ? "확인 중..." : "확인"}
+                  </button>
+                </form>
+
+                {verification !== null && (
+                  <div className={`verify-alert ${verification ? "success" : "failure"}`}>
+                    {verification ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                    <span>
+                      {verification
+                        ? "인증번호가 일치합니다."
+                        : "인증번호가 일치하지 않거나 만료되었습니다."}
+                    </span>
+                  </div>
+                )}
+              </section>
+            )}
           </>
         )}
 
-        {/* 개인정보 보호 안내 */}
-        <section className="privacy-panel">
-          <div className="privacy-icon">
-            <Lock size={20} />
+        {/* 4. 개인정보 보호 및 보안 유의사항 */}
+        <section className="security-notice-card">
+          <div className="notice-icon">
+            <Lock size={16} />
           </div>
-
-          <div>
-            <h4>개인정보 보호 및 로컬 저장소 보안</h4>
-            <p>
-              비밀 키와 인증번호는 브라우저 내부에서만 처리되며 외부 서버로 절대 전송되지 않습니다.
-              단, 등록된 계정 정보는 브라우저 LocalStorage에 암호화되지 않은 채 보관되므로, 공용 PC나 공용 기기에서는 사용 후 반드시 계정을 삭제해 주세요.
+          <div className="notice-content">
+            <p className="notice-title">로컬 전용 암호화</p>
+            <p className="notice-desc">
+              비밀 키는 외부 서버로 전송되지 않으며 브라우저에만 저장됩니다.
+              공용 기기에서는 사용 후 계정을 삭제하세요.
             </p>
-            <p className="privacy-warning-sub">
-              ⚠️ [주의] 공개된 테스트용 비밀 키는 실습 및 데모 전용이므로 실제 사용자 계정(Google/GitHub 등)에 등록하여 사용하지 마세요.
+            <p className="notice-demo-warn">
+              ⚠️ 테스트용 데모 키는 실습 전용입니다. 실제 계정에 등록하지 마세요.
             </p>
           </div>
-
-          <ShieldCheck
-            size={23}
-            className="privacy-check"
-          />
         </section>
 
-        {/* 하단 */}
-        <footer>
-          <div className="footer-logo">
-            <ShieldCheck size={17} />
-            모바일 OTP 인증기
-          </div>
-
-          <p>Web Crypto API · RFC 6238 TOTP 기반</p>
-
-          <p className="footer-version">
-            모바일 인증기 · 버전 1.0
-          </p>
+        {/* 하단 푸터 */}
+        <footer className="app-footer">
+          <span>RFC 6238 TOTP · Web Crypto API</span>
         </footer>
       </main>
 
