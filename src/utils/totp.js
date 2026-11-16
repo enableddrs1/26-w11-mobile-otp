@@ -6,6 +6,57 @@
 const BASE32_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 
 /**
+ * Base32 비밀 키 문자열 정제 (공백, 하이픈 제거, 대문자 변환, 패딩 제거)
+ * Google Authenticator 및 표준 규격과의 100% 호환 보장
+ * @param {string} secret 
+ * @returns {string}
+ */
+export function cleanSecretKey(secret = '') {
+  return secret
+    .toString()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '')
+    .replace(/=+$/, '');
+}
+
+/**
+ * 안전한 클립보드 복사 함수 (최신 API 우선, 실패 시 fallback execCommand 지원)
+ * @param {string} text 
+ * @returns {Promise<boolean>}
+ */
+export async function copyToClipboard(text) {
+  if (!text) return false;
+
+  // 1. 최신 Clipboard API 시도
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // 권한 거부 또는 실패 시 Fallback으로 전환
+    }
+  }
+
+  // 2. 비보안 HTTP 또는 구형 브라우저용 Fallback
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '0';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (err) {
+    console.warn('클립보드 복사 실패:', err);
+    return false;
+  }
+}
+
+/**
  * 암호학적으로 안전한 Base32 비밀 키 생성 (Math.random() 미사용)
  * @param {number} length 바이트 길이 (기본 20바이트 = 160비트, 32자 Base32)
  * @returns {string} Base32 문자열
@@ -49,7 +100,7 @@ export function encodeBase32(bytes) {
  * @returns {Uint8Array}
  */
 export function decodeBase32(base32) {
-  const cleanInput = base32.toUpperCase().replace(/=+$/, '').replace(/\s+/g, '');
+  const cleanInput = cleanSecretKey(base32);
   let bits = 0;
   let value = 0;
   const result = [];
@@ -169,7 +220,7 @@ export async function verifyTotp(inputCode, secretBase32, window = 1) {
 export function buildOtpAuthUri({ issuer = 'KopoSec', account = 'user@kopo.ac.kr', secret }) {
   const cleanIssuer = encodeURIComponent(issuer.trim());
   const cleanAccount = encodeURIComponent(account.trim());
-  const cleanSecret = secret.trim();
+  const safeSecret = cleanSecretKey(secret);
 
-  return `otpauth://totp/${cleanIssuer}:${cleanAccount}?secret=${cleanSecret}&issuer=${cleanIssuer}&algorithm=SHA1&digits=6&period=30`;
+  return `otpauth://totp/${cleanIssuer}:${cleanAccount}?secret=${safeSecret}&issuer=${cleanIssuer}&algorithm=SHA1&digits=6&period=30`;
 }
