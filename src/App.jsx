@@ -1,34 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ShieldCheck,
-  Plus,
   KeyRound,
   CheckCircle,
+  Settings,
+  Plus,
   Wifi,
   BatteryCharging,
-  Smartphone,
-  Lock,
+  ShieldCheck,
   Search,
 } from 'lucide-react';
 import OtpCard from './components/OtpCard';
 import QrModal from './components/QrModal';
 import OtpVerifier from './components/OtpVerifier';
-import SecurityInfo from './components/SecurityInfo';
+import SettingsView from './components/SettingsView';
 import { getTotpTimeState, generateTotp } from './utils/totp';
 import './App.css';
 
 // 초기 데모용 샘플 계정 (RFC 4648 Base32 시크릿)
-const INITIAL_ACCOUNTS = [
+const DEFAULT_ACCOUNTS = [
   {
     id: 'acc_demo_github',
     issuer: 'GitHub 2FA',
-    account: 'octocat@github.com',
-    secret: 'JBSWY3DPEHPK3PXP', // RFC 4226/6238 표준 테스트 키 중 하나
+    account: 'student@kopo.ac.kr',
+    secret: 'JBSWY3DPEHPK3PXP', // RFC 4226/6238 표준 테스트 키
   },
   {
     id: 'acc_demo_kopo',
     issuer: 'Kopo CyberSec',
-    account: 'security_lab@kopo.ac.kr',
+    account: 'admin_lab@kopo.ac.kr',
     secret: 'MZXW633PN5XW6MZX',
   },
 ];
@@ -40,15 +39,15 @@ export default function App() {
       try {
         return JSON.parse(saved);
       } catch {
-        return INITIAL_ACCOUNTS;
+        return DEFAULT_ACCOUNTS;
       }
     }
-    return INITIAL_ACCOUNTS;
+    return DEFAULT_ACCOUNTS;
   });
 
   const [codes, setCodes] = useState({});
   const [timeState, setTimeState] = useState(getTotpTimeState());
-  const [activeTab, setActiveTab] = useState('codes'); // 'codes' | 'verifier' | 'security'
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'verifier' | 'settings'
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState(accounts[0]?.id || '');
   const [toastMessage, setToastMessage] = useState('');
@@ -59,10 +58,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('kopo_otp_accounts', JSON.stringify(accounts));
   }, [accounts]);
-
-  // 활성 선택된 계정 ID (선택된 ID가 삭제되었거나 비어있을 경우 유효한 첫 번째 계정 자동 선택)
-  const currentSelectedAccountId =
-    accounts.find((a) => a.id === selectedAccountId)?.id || accounts[0]?.id || '';
 
   // 스마트폰 상태바 현재 시각 (HH:mm)
   useEffect(() => {
@@ -77,7 +72,7 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1초 주기로 30초 카운트다운 및 TOTP 계산
+  // 1초 주기로 30초 카운트다운 갱신
   useEffect(() => {
     const tick = () => {
       const newState = getTotpTimeState();
@@ -89,7 +84,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // timeState 또는 accounts 변경 시 모든 계정의 6자리 코드 비동기 계산
+  // timeState 또는 accounts 변경 시 모든 계정의 6자리 코드 계산
   useEffect(() => {
     let isCurrent = true;
 
@@ -119,17 +114,17 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage('');
-    }, 2000);
+    }, 2200);
   };
 
   const handleCopyCode = (code, issuer) => {
-    showToast(`'${issuer}' 코드(${code})가 복사되었습니다!`);
+    showToast(`'${issuer}' 코드(${code}) 복사 완료!`);
   };
 
   const handleAddAccount = (newAcc) => {
     setAccounts((prev) => [newAcc, ...prev]);
     setSelectedAccountId(newAcc.id);
-    showToast(`'${newAcc.issuer}' 계정이 등록되었습니다!`);
+    showToast(`'${newAcc.issuer}' 계정이 추가되었습니다!`);
   };
 
   const handleDeleteAccount = (id) => {
@@ -137,10 +132,26 @@ export default function App() {
     showToast('계정이 삭제되었습니다.');
   };
 
+  const handleResetAccounts = () => {
+    if (window.confirm('모든 계정을 삭제하고 초기화하시겠습니까?')) {
+      setAccounts([]);
+      showToast('모든 계정이 초기화되었습니다.');
+    }
+  };
+
+  const handleRestoreDefaults = () => {
+    setAccounts(DEFAULT_ACCOUNTS);
+    showToast('기본 데모 계정이 복원되었습니다.');
+  };
+
   const handleSelectForVerify = (account) => {
     setSelectedAccountId(account.id);
     setActiveTab('verifier');
   };
+
+  // 현재 선택된 계정 유효성 보장
+  const currentSelectedAccountId =
+    accounts.find((a) => a.id === selectedAccountId)?.id || accounts[0]?.id || '';
 
   // 검색 필터링
   const filteredAccounts = accounts.filter(
@@ -151,9 +162,9 @@ export default function App() {
 
   return (
     <div className="mobile-app-wrapper">
-      {/* 스마트폰 베젤 외형 래퍼 (390px x 844px 반응형 프레임) */}
+      {/* 스마트폰 베젤 외형 래퍼 (아이폰/갤럭시 규격 390px 반응형) */}
       <div className="smartphone-frame">
-        {/* 모바일 상단 상태바 */}
+        {/* 1. 상단 스마트폰 상태바 */}
         <header className="mobile-status-bar">
           <span className="status-time">{currentTimeStr || '09:41'}</span>
           <div className="status-notch">
@@ -166,32 +177,32 @@ export default function App() {
           </div>
         </header>
 
-        {/* 앱 상단 헤더 */}
+        {/* 2. 앱 헤더 (로고, 이름, Zero-Transmission 뱃지) */}
         <div className="app-header">
           <div className="app-brand">
             <div className="brand-icon-wrap">
-              <Lock size={18} className="brand-icon" />
+              <KeyRound size={19} className="brand-icon text-white" />
             </div>
             <div>
               <h1 className="brand-title">Zero-OTP</h1>
-              <span className="brand-subtitle">Google Authenticator Style</span>
+              <span className="brand-subtitle">Mobile Authenticator</span>
             </div>
           </div>
-          <div className="header-security-badge" title="외부 전송 없는 로컬 암호화">
+          <div className="header-security-badge" title="클라이언트 전용 암호화 (No Server)">
             <ShieldCheck size={14} />
             <span>Zero-Tx</span>
           </div>
         </div>
 
-        {/* 탭 네비게이션 */}
+        {/* 3. 하단 3대 탭 네비게이션 */}
         <nav className="tab-navigation">
           <button
             type="button"
-            className={`tab-btn ${activeTab === 'codes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('codes')}
+            className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
           >
             <KeyRound size={16} />
-            <span>인증 코드</span>
+            <span>메인 대시보드</span>
             <span className="tab-count-badge">{accounts.length}</span>
           </button>
           <button
@@ -200,22 +211,23 @@ export default function App() {
             onClick={() => setActiveTab('verifier')}
           >
             <CheckCircle size={16} />
-            <span>코드 검증기</span>
+            <span>OTP 검증</span>
           </button>
           <button
             type="button"
-            className={`tab-btn ${activeTab === 'security' ? 'active' : ''}`}
-            onClick={() => setActiveTab('security')}
+            className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
           >
-            <Smartphone size={16} />
-            <span>보안 원리</span>
+            <Settings size={16} />
+            <span>설정</span>
           </button>
         </nav>
 
-        {/* 메인 콘텐츠 뷰 영역 */}
+        {/* 4. 메인 콘텐츠 영역 */}
         <main className="mobile-content-area">
-          {activeTab === 'codes' && (
-            <div className="codes-view">
+          {/* [화면 1: 메인 대시보드] */}
+          {activeTab === 'dashboard' && (
+            <div className="dashboard-view">
               {/* 계정 검색 바 */}
               {accounts.length > 2 && (
                 <div className="search-bar">
@@ -223,7 +235,7 @@ export default function App() {
                   <input
                     type="text"
                     className="search-input"
-                    placeholder="계정 또는 서비스 검색..."
+                    placeholder="서비스 또는 계정 검색..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
@@ -233,19 +245,19 @@ export default function App() {
               {/* 계정 카드 목록 */}
               {filteredAccounts.length === 0 ? (
                 <div className="empty-accounts-view">
-                  <KeyRound size={48} className="empty-icon" />
+                  <KeyRound size={48} className="empty-icon text-violet" />
                   <p className="empty-title">
-                    {searchQuery ? '일치하는 계정이 없습니다.' : '등록된 계정이 없습니다.'}
+                    {searchQuery ? '일치하는 계정이 없습니다.' : '등록된 OTP 계정이 없습니다.'}
                   </p>
                   <p className="empty-desc">
-                    하단의 <strong>+</strong> 버튼을 눌러 새 QR 코드를 스캔하거나 추가해 보세요.
+                    우측 하단의 <strong>+</strong> 버튼을 눌러 첫 번째 계정을 등록해 보세요.
                   </p>
                   <button
                     type="button"
                     className="btn-primary mt-4"
                     onClick={() => setIsQrModalOpen(true)}
                   >
-                    <Plus size={16} /> 지금 계정 추가하기
+                    <Plus size={16} /> 새 계정 추가하기
                   </button>
                 </div>
               ) : (
@@ -267,6 +279,7 @@ export default function App() {
             </div>
           )}
 
+          {/* [화면 2: OTP 검증 화면] */}
           {activeTab === 'verifier' && (
             <OtpVerifier
               accounts={accounts}
@@ -276,16 +289,24 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'security' && <SecurityInfo />}
+          {/* [화면 3: 설정 화면] */}
+          {activeTab === 'settings' && (
+            <SettingsView
+              accounts={accounts}
+              onResetAccounts={handleResetAccounts}
+              onRestoreDefaults={handleRestoreDefaults}
+              onDeleteAccount={handleDeleteAccount}
+            />
+          )}
         </main>
 
-        {/* 플로팅 액션 버튼 (FAB `+`) */}
-        {activeTab === 'codes' && (
+        {/* 플로팅 액션 버튼 (대시보드 화면에서만 노출되는 새 계정 추가 FAB `+`) */}
+        {activeTab === 'dashboard' && (
           <button
             type="button"
             className="fab-add-button"
             onClick={() => setIsQrModalOpen(true)}
-            title="새 OTP 계정 등록 (QR 코드)"
+            title="새 OTP 계정 등록 (QR 코드 및 비밀 키)"
           >
             <Plus size={28} />
           </button>
@@ -305,7 +326,7 @@ export default function App() {
         </footer>
       </div>
 
-      {/* QR 등록 바텀시트 모달 */}
+      {/* [화면 4: 계정 추가 바텀시트 모달] */}
       <QrModal
         isOpen={isQrModalOpen}
         onClose={() => setIsQrModalOpen(false)}

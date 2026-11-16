@@ -9,14 +9,14 @@ export default function OtpVerifier({
   onAccountChange,
 }) {
   const [inputCode, setInputCode] = useState('');
-  const [verifyResult, setVerifyResult] = useState(null); // { valid: boolean, message: string, offset: number | null }
+  const [verifyResult, setVerifyResult] = useState(null); // { valid: boolean, message: string }
   const [isVerifying, setIsVerifying] = useState(false);
   const [showHint, setShowHint] = useState(true);
   const [currentLiveCode, setCurrentLiveCode] = useState('------');
+  const [isShaking, setIsShaking] = useState(false);
 
   const activeAccount = accounts.find((a) => a.id === selectedAccountId) || accounts[0];
 
-  // 선택된 계정의 현재 실제 OTP 코드 계산 (실습용 힌트)
   useEffect(() => {
     let isMounted = true;
     if (activeAccount?.secret) {
@@ -29,76 +29,64 @@ export default function OtpVerifier({
     };
   }, [activeAccount, timeRemaining]);
 
-  const handleVerify = async (e) => {
-    if (e) e.preventDefault();
-    if (!activeAccount) return;
+  const executeVerify = async (codeToVerify) => {
+    if (!activeAccount || !codeToVerify || codeToVerify.length !== 6) return;
 
     setIsVerifying(true);
-    const result = await verifyTotp(inputCode, activeAccount.secret, 1);
+    const result = await verifyTotp(codeToVerify, activeAccount.secret, 1);
     setIsVerifying(false);
 
     if (result.valid) {
-      const offsetMsg =
+      const detailMsg =
         result.matchedOffset === 0
-          ? '현재 타임스텝과 완벽히 일치합니다.'
-          : result.matchedOffset === -1
-          ? '이전 타임스텝(-30s) 허용 범위로 검증되었습니다.'
-          : '다음 타임스텝(+30s) 허용 범위로 검증되었습니다.';
+          ? '현재 유효 타임스텝과 완벽히 일치합니다.'
+          : '오차 허용 범위(±30s) 내에서 안전하게 일치했습니다.';
 
       setVerifyResult({
         valid: true,
-        message: `인증 성공! (200 OK) ${offsetMsg}`,
-        offset: result.matchedOffset,
+        message: `인증 성공! (200 OK) ${detailMsg}`,
       });
     } else {
       setVerifyResult({
         valid: false,
-        message: '인증 실패: 6자리 번호가 일치하지 않거나 만료되었습니다.',
-        offset: null,
+        message: '인증 실패 (401 Mismatch): 코드가 일치하지 않거나 30초가 지나 만료되었습니다.',
       });
+      // 흔들림 애니메이션 트리거
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 500);
     }
+  };
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    executeVerify(inputCode);
   };
 
   const handleInputChange = (e) => {
     const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 6);
     setInputCode(val);
     if (verifyResult) {
-      setVerifyResult(null); // 입력 변경 시 이전 결과 리셋
+      setVerifyResult(null);
     }
-    // 6자리 자동 제출
+    // 6자리가 완성되면 자동 검증 실행
     if (val.length === 6) {
-      setTimeout(() => {
-        verifyTotp(val, activeAccount.secret, 1).then((res) => {
-          if (res.valid) {
-            setVerifyResult({
-              valid: true,
-              message: '인증 성공! (200 OK) 일치하는 TOTP 코드입니다.',
-              offset: res.matchedOffset,
-            });
-          } else {
-            setVerifyResult({
-              valid: false,
-              message: '인증 실패: 일치하지 않는 6자리 코드입니다.',
-              offset: null,
-            });
-          }
-        });
-      }, 100);
+      executeVerify(val);
     }
   };
 
   const handleFillExpected = () => {
     if (currentLiveCode && currentLiveCode !== '------') {
       setInputCode(currentLiveCode);
+      executeVerify(currentLiveCode);
     }
   };
 
   if (!activeAccount) {
     return (
       <div className="verifier-empty-state">
-        <ShieldAlert size={48} className="empty-icon" />
-        <p>등록된 OTP 계정이 없습니다.</p>
-        <span className="subtext">먼저 메인 화면에서 계정을 추가하세요.</span>
+        <ShieldAlert size={48} className="empty-icon text-violet" />
+        <p className="empty-title">등록된 OTP 계정이 없습니다.</p>
+        <span className="empty-desc">대시보드에서 계정을 먼저 추가하세요.</span>
       </div>
     );
   }
@@ -108,8 +96,8 @@ export default function OtpVerifier({
       <div className="verifier-card">
         <div className="verifier-header">
           <div className="verifier-title-group">
-            <ShieldCheck size={20} className="icon-blue" />
-            <h3 className="verifier-title">2단계 인증 검증 시뮬레이터</h3>
+            <ShieldCheck size={20} className="text-violet" />
+            <h3 className="verifier-title">2단계 인증 검증기</h3>
           </div>
           <span className="live-pill">
             <span className="pulse-dot"></span>
@@ -118,11 +106,10 @@ export default function OtpVerifier({
         </div>
 
         <p className="verifier-desc">
-          스마트폰 Authenticator에 표시된 6자리 코드를 입력하여 일치 여부를
-          검증합니다.
+          스마트폰 Authenticator에 표시된 6자리 번호를 입력하고 일치 여부를 검증하세요.
         </p>
 
-        {/* 계정 선택 셀렉트 */}
+        {/* 검증할 대상 계정 선택 */}
         <div className="form-group">
           <label className="form-label">검증할 계정 선택</label>
           <select
@@ -142,11 +129,11 @@ export default function OtpVerifier({
           </select>
         </div>
 
-        {/* 6자리 입력 필드 */}
-        <form onSubmit={handleVerify} className="verifier-form">
+        {/* 6자리 입력 및 인증하기 버튼 */}
+        <form onSubmit={handleFormSubmit} className="verifier-form">
           <div className="code-input-group">
-            <label className="form-label">6자리 인증 코드 (OTP)</label>
-            <div className="otp-input-box">
+            <label className="form-label">6자리 인증번호 (OTP)</label>
+            <div className={`otp-input-box ${isShaking ? 'shake-anim' : ''}`}>
               <input
                 type="text"
                 inputMode="numeric"
@@ -169,12 +156,12 @@ export default function OtpVerifier({
               disabled={inputCode.length !== 6 || isVerifying}
             >
               <ArrowRight size={18} />
-              {isVerifying ? '검증 중...' : '코드 검증 (Verify)'}
+              {isVerifying ? '검증 연산 중...' : '인증하기 (Verify)'}
             </button>
           </div>
         </form>
 
-        {/* 결과 피드백 카드 */}
+        {/* 인증 성공 또는 실패 메시지 배너 */}
         {verifyResult && (
           <div
             className={`verify-result-banner ${
@@ -197,7 +184,7 @@ export default function OtpVerifier({
           </div>
         )}
 
-        {/* 실습 및 검증용 힌트 박스 */}
+        {/* 초보자 실습용 힌트 패널 */}
         <div className="verifier-hint-panel">
           <div className="hint-header">
             <span className="hint-label">💡 실습용 예상 코드 및 동기화 힌트</span>
@@ -226,7 +213,7 @@ export default function OtpVerifier({
                 </button>
               </div>
               <div className="hint-item">
-                <span>남은 유효 시간:</span>
+                <span>남은 유효시간:</span>
                 <span className="hint-timer">{timeRemaining}초</span>
               </div>
             </div>

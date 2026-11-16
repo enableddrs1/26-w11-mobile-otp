@@ -1,26 +1,22 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { X, RefreshCw, KeyRound, Copy, Check, ShieldCheck, Sparkles } from 'lucide-react';
+import { X, RefreshCw, KeyRound, Copy, Check, ShieldCheck, Sparkles, AlertCircle } from 'lucide-react';
 import { generateBase32Secret, buildOtpAuthUri } from '../utils/totp';
 
 export default function QrModal({ isOpen, onClose, onAddAccount }) {
-  const [issuer, setIssuer] = useState('Kopo CyberSec');
-  const [account, setAccount] = useState('student@kopo.ac.kr');
+  const [issuer, setIssuer] = useState('Google Authenticator');
+  const [account, setAccount] = useState('user@kopo.ac.kr');
   const [secret, setSecret] = useState(() => generateBase32Secret(20));
   const [copiedKey, setCopiedKey] = useState(false);
+  const [keyError, setKeyError] = useState('');
+
+  if (!isOpen) return null;
 
   const regenerateSecret = () => {
     const newSecret = generateBase32Secret(20);
     setSecret(newSecret);
+    setKeyError('');
   };
-
-  if (!isOpen) return null;
-
-  const otpAuthUri = buildOtpAuthUri({
-    issuer: issuer || 'Service',
-    account: account || 'user',
-    secret,
-  });
 
   const handleCopySecret = () => {
     navigator.clipboard.writeText(secret);
@@ -28,9 +24,28 @@ export default function QrModal({ isOpen, onClose, onAddAccount }) {
     setTimeout(() => setCopiedKey(false), 1500);
   };
 
+  const handleSecretChange = (e) => {
+    const val = e.target.value.toUpperCase().replace(/[^A-Z2-7]/g, '');
+    setSecret(val);
+    if (val.length < 8) {
+      setKeyError('Base32 키는 최소 8자 이상 권장됩니다.');
+    } else {
+      setKeyError('');
+    }
+  };
+
+  const otpAuthUri = buildOtpAuthUri({
+    issuer: issuer || 'Service',
+    account: account || 'user',
+    secret: secret || 'JBSWY3DPEHPK3PXP',
+  });
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!secret) return;
+    if (!secret || secret.length < 8) {
+      setKeyError('올바른 Base32 비밀 키를 입력하세요 (A-Z, 2-7).');
+      return;
+    }
 
     onAddAccount({
       id: `acc_${Date.now()}`,
@@ -52,10 +67,10 @@ export default function QrModal({ isOpen, onClose, onAddAccount }) {
 
         <div className="modal-header">
           <div className="modal-title-group">
-            <span className="modal-badge">
+            <span className="modal-badge-violet">
               <ShieldCheck size={14} /> Zero-Transmission
             </span>
-            <h2 className="modal-title">새 OTP 계정 등록</h2>
+            <h2 className="modal-title">새 OTP 계정 추가</h2>
           </div>
           <button
             type="button"
@@ -68,61 +83,60 @@ export default function QrModal({ isOpen, onClose, onAddAccount }) {
         </div>
 
         <p className="modal-description">
-          스마트폰의 <strong>Google Authenticator</strong> 앱을 열고 아래 QR 코드를
-          스캔하세요.
+          스마트폰 Authenticator 앱으로 QR 코드를 스캔하거나 수동으로 키를 등록하세요.
         </p>
 
-        {/* QR 코드 렌더링 영역 */}
+        {/* 1. QR 코드 렌더링 영역 (고화질 화이트 플레이트) */}
         <div className="qr-box-wrapper">
           <div className="qr-code-frame">
             <QRCodeSVG
               value={otpAuthUri}
-              size={180}
+              size={175}
               level="M"
               includeMargin={true}
               bgColor="#ffffff"
-              fgColor="#0f172a"
+              fgColor="#070a12"
             />
           </div>
           <div className="qr-badge-info">
-            <Sparkles size={14} /> 스마트폰 카메라로 스캔 가능
+            <Sparkles size={14} /> 스마트폰 카메라로 즉시 스캔 가능
           </div>
         </div>
 
-        {/* 계정 정보 입력 폼 */}
+        {/* 2. 계정 정보 & 비밀키 입력 폼 */}
         <form onSubmit={handleSubmit} className="modal-form">
           <div className="form-group">
-            <label className="form-label">서비스 발급자 (Issuer)</label>
+            <label className="form-label">서비스 이름 (Issuer)</label>
             <input
               type="text"
               className="form-input"
               value={issuer}
               onChange={(e) => setIssuer(e.target.value)}
-              placeholder="예: GitHub, Google, Kopo"
+              placeholder="예: Google, GitHub, Kopo"
               required
             />
           </div>
 
           <div className="form-group">
-            <label className="form-label">사용자 계정명 (Account / Email)</label>
+            <label className="form-label">계정 이메일 / 아이디 (Account)</label>
             <input
               type="text"
               className="form-input"
               value={account}
               onChange={(e) => setAccount(e.target.value)}
-              placeholder="예: user@kopo.ac.kr"
+              placeholder="예: student@kopo.ac.kr"
               required
             />
           </div>
 
           <div className="form-group">
             <div className="secret-label-row">
-              <label className="form-label">Base32 비밀 키 (Secret)</label>
+              <label className="form-label">Base32 비밀 키 (Secret Key)</label>
               <button
                 type="button"
                 className="btn-text-action"
                 onClick={regenerateSecret}
-                title="암호학적 안전 난수 재발급"
+                title="암호학적 난수로 새 키 생성"
               >
                 <RefreshCw size={13} /> 새 키 생성
               </button>
@@ -130,9 +144,11 @@ export default function QrModal({ isOpen, onClose, onAddAccount }) {
             <div className="secret-input-wrapper">
               <input
                 type="text"
-                readOnly
                 className="form-input monospace"
                 value={secret}
+                onChange={handleSecretChange}
+                placeholder="직접 키를 입력하거나 위 버튼을 누르세요"
+                required
               />
               <button
                 type="button"
@@ -143,10 +159,15 @@ export default function QrModal({ isOpen, onClose, onAddAccount }) {
                 {copiedKey ? <Check size={16} /> : <Copy size={16} />}
               </button>
             </div>
-            <p className="field-hint">
-              🔒 <code>window.crypto.getRandomValues</code>를 통해 브라우저 내부에서만
-              생성되었습니다.
-            </p>
+            {keyError ? (
+              <p className="field-error">
+                <AlertCircle size={13} /> {keyError}
+              </p>
+            ) : (
+              <p className="field-hint">
+                🔒 <code>crypto.getRandomValues</code>로 생성된 브라우저 전용 로컬 키입니다.
+              </p>
+            )}
           </div>
 
           <div className="modal-footer-actions">
@@ -158,7 +179,7 @@ export default function QrModal({ isOpen, onClose, onAddAccount }) {
               취소
             </button>
             <button type="submit" className="btn-primary">
-              <KeyRound size={16} /> 이 웹앱 목록에 추가하기
+              <KeyRound size={16} /> 계정 목록에 추가하기
             </button>
           </div>
         </form>

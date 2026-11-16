@@ -1,34 +1,34 @@
 import React from 'react';
 
 /**
- * 30초 원형 카운트다운 타이머 (Google Authenticator 스타일)
+ * 30초 원형 카운트다운 타이머 (Google Authenticator 스타일 + 일렉트릭 바이올렛)
  * @param {{ timeRemaining: number, progress: number, size?: number, strokeWidth?: number }} props 
  */
 export default function CircularTimer({
   timeRemaining,
   progress,
-  size = 38,
+  size = 40,
   strokeWidth = 3.5,
 }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  // 남은 시간(0~100%)에 따른 dashoffset 계산
   const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   const isWarning = timeRemaining <= 7;
   const isCritical = timeRemaining <= 3;
 
+  // 바이올렛(#8B5CF6) -> 앰버(#F59E0B) -> 로즈 레드(#F43F5E)
   const color = isCritical
-    ? '#ef4444' // Red
+    ? '#f43f5e'
     : isWarning
-    ? '#f59e0b' // Amber/Orange
-    : '#3b82f6'; // Google Blue
+    ? '#f59e0b'
+    : '#8b5cf6';
 
   return (
     <div
       className={`circular-timer-container ${isCritical ? 'pulse-alert' : ''}`}
       style={{ width: size, height: size, position: 'relative' }}
-      title={`남은 시간: ${timeRemaining}초`}
+      title={`남은 유효시간: ${timeRemaining}초`}
     >
       <svg
         width={size}
@@ -36,14 +36,13 @@ export default function CircularTimer({
         className="circular-timer-svg"
         style={{ transform: 'rotate(-90deg)' }}
       >
-        {/* 배경 트랙 */}
+        {/* 트랙 링 */}
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="currentColor"
-          className="timer-track"
+          stroke="rgba(168, 85, 247, 0.12)"
           strokeWidth={strokeWidth}
         />
         {/* 진행률 링 */}
@@ -58,11 +57,11 @@ export default function CircularTimer({
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           style={{
-            transition: 'stroke-dashoffset 0.8s linear, stroke 0.3s ease',
+            transition: 'stroke-dashoffset 0.85s linear, stroke 0.3s ease',
           }}
         />
       </svg>
-      {/* 중앙 남은 초 텍스트 */}
+      {/* 중앙 남은 초 숫자 */}
       <span
         className="timer-seconds-text"
         style={{
@@ -75,7 +74,7 @@ export default function CircularTimer({
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: size * 0.32,
-          fontWeight: 700,
+          fontWeight: 800,
           color: color,
           userSelect: 'none',
         }}
